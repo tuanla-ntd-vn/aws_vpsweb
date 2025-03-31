@@ -1,0 +1,77 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>EC2 Instance Manager</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+  </head>
+  <body class="bg-gray-100 p-6">
+    <div class="max-w-4xl mx-auto bg-white p-6 rounded-lg shadow">
+      <h1 class="text-2xl font-bold mb-4">EC2 Instance Manager</h1>
+      <button onclick="fetchInstances()" class="bg-blue-500 text-white px-4 py-2 rounded mb-4">Refresh List</button>
+      <table class="w-full border-collapse border border-gray-300">
+        <thead>
+          <tr class="bg-gray-200">
+            <th class="border px-4 py-2">Instance ID</th>
+            <th class="border px-4 py-2">State</th>
+            <th class="border px-4 py-2">Action</th>
+          </tr>
+        </thead>
+        <tbody id="instances"></tbody>
+      </table>
+    </div>
+
+    <script>
+      const API_URL = 'https://4bpxr6tty5.execute-api.us-east-1.amazonaws.com/v1/ec2-instances';
+
+      async function fetchInstances() {
+        try {
+          const response = await fetch(API_URL, {
+            method: 'GET'
+          });
+          if (!response.ok) throw new Error('Failed to fetch data');
+          const data = await response.json();
+          console.log('Instances:', data);
+          renderInstances(data);
+        } catch (error) {
+          alert('Error fetching instances');
+          console.error(error);
+        }
+      }
+
+      function renderInstances(instances) {
+        const tbody = document.getElementById('instances');
+        tbody.innerHTML = '';
+        instances.forEach((instance) => {
+          const row = document.createElement('tr');
+          row.innerHTML = `
+                    <td class="border px-4 py-2">${instance.InstanceId}</td>
+                    <td class="border px-4 py-2">${instance.State.Name}</td>
+                    <td class="border px-4 py-2">
+                        <button class="bg-green-500 text-white px-2 py-1 rounded" onclick="controlInstance('${instance.InstanceId}', 'start')">Start</button>
+                        <button class="bg-red-500 text-white px-2 py-1 rounded" onclick="controlInstance('${instance.InstanceId}', 'stop')">Stop</button>
+                    </td>
+                `;
+          tbody.appendChild(row);
+        });
+      }
+
+      async function controlInstance(instanceId, action) {
+        try {
+          const response = await fetch(`${API_URL}/control`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ instanceId, action }),
+          });
+          const data = await response.json();
+          alert(data.message);
+          fetchInstances();
+        } catch (error) {
+          alert('Error performing action');
+          console.error(error);
+        }
+      }
+    </script>
+  </body>
+</html>
