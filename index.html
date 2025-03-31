@@ -7,13 +7,20 @@
     <script src="https://cdn.tailwindcss.com"></script>
   </head>
   <body class="bg-gray-100 p-6">
-    <div class="max-w-4xl mx-auto bg-white p-6 rounded-lg shadow">
+    <div class="max-w-4xl mx-auto bg-white p-6 rounded-lg shadow relative">
       <h1 class="text-2xl font-bold mb-4">EC2 Instance Manager</h1>
-      <button onclick="fetchInstances()" class="bg-blue-500 text-white px-4 py-2 rounded mb-4">Refresh List</button>
-      <table class="w-full border-collapse border border-gray-300">
+      <button id="fetchBtn" onclick="fetchInstances()" class="bg-blue-500 text-white px-4 py-2 rounded mb-4">
+        Refresh List
+      </button>
+      <p id="notice" class="text-red-500 mt-2">Please refresh the list to see updates.</p>
+      <div id="loading" class="absolute inset-0 flex items-center justify-center bg-white bg-opacity-75">
+        <div class="animate-spin rounded-full h-12 w-12 border-t-4 border-blue-500"></div>
+      </div>
+      <table class="w-full border-collapse border border-gray-300 mt-2">
         <thead>
           <tr class="bg-gray-200">
-            <th class="border px-4 py-2">Instance ID</th>
+            <th class="border px-4 py-2">Name</th>
+            <th class="border px-4 py-2">Public IP</th>
             <th class="border px-4 py-2">State</th>
             <th class="border px-4 py-2">Action</th>
           </tr>
@@ -24,54 +31,99 @@
 
     <script>
       const API_URL = 'https://4bpxr6tty5.execute-api.us-east-1.amazonaws.com/v1/ec2-instances';
+      const API_CONTROL_URL = 'https://4bpxr6tty5.execute-api.us-east-1.amazonaws.com/v1/ec2-control-instances';
+
+      function toggleLoading(show) {
+        const loadingOverlay = document.getElementById('loading');
+        if (show) {
+          loadingOverlay.classList.remove('hidden');
+        } else {
+          loadingOverlay.classList.add('hidden');
+        }
+      }
 
       async function fetchInstances() {
         try {
-          const response = await fetch(API_URL, {
-            method: 'GET'
-          });
+          const response = await fetch(API_URL, { method: 'GET' });
           if (!response.ok) throw new Error('Failed to fetch data');
           const data = await response.json();
-          console.log('Instances:', data);
           renderInstances(data);
+          return data;
         } catch (error) {
           alert('Error fetching instances');
           console.error(error);
+          return [];
         }
       }
 
       function renderInstances(instances) {
         const tbody = document.getElementById('instances');
         tbody.innerHTML = '';
-        instances.forEach((instance) => {
+        (instances || []).forEach((instance) => {
+          const state = instance.State.toLowerCase();
+          const isRunning = state === 'running';
+          const isStopped = state === 'stopped';
+          const isPending = ['pending', 'stopping'].includes(state);
           const row = document.createElement('tr');
           row.innerHTML = `
-                    <td class="border px-4 py-2">${instance.InstanceId}</td>
-                    <td class="border px-4 py-2">${instance.State.Name}</td>
-                    <td class="border px-4 py-2">
-                        <button class="bg-green-500 text-white px-2 py-1 rounded" onclick="controlInstance('${instance.InstanceId}', 'start')">Start</button>
-                        <button class="bg-red-500 text-white px-2 py-1 rounded" onclick="controlInstance('${instance.InstanceId}', 'stop')">Stop</button>
-                    </td>
-                `;
+            <td class="border px-4 py-2">${instance.Name || ''}</td>
+            <td class="border px-4 py-2 text-center">${instance.PublicIp || 'N/A'}</td>
+            <td class="border px-4 py-2 text-center">${instance.State}</td>
+            <td class="border px-4 py-2 text-center">
+              <button class="bg-green-500 text-white px-2 py-1 rounded disabled:opacity-50"
+                onclick="controlInstance('${instance.InstanceId}', 'start')"
+                ${isRunning || isPending ? 'disabled' : ''}>
+                Start
+              </button>
+              <button class="bg-red-500 text-white px-2 py-1 rounded disabled:opacity-50"
+                onclick="controlInstance('${instance.InstanceId}', 'stop')"
+                ${isStopped || isPending ? 'disabled' : ''}>
+                Stop
+              </button>
+            </td>
+          `;
           tbody.appendChild(row);
         });
       }
 
       async function controlInstance(instanceId, action) {
+        toggleLoading(true);
         try {
-          const response = await fetch(`${API_URL}/control`, {
+          const response = await fetch(`${API_CONTROL_URL}`, {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({ instanceId, action }),
           });
           const data = await response.json();
+          await waitForStableState(instanceId);
           alert(data.message);
-          fetchInstances();
         } catch (error) {
           alert('Error performing action');
           console.error(error);
         }
       }
+
+      async function waitForStableState(instanceId) {
+        let instances;
+        let instance;
+        do {
+          await new Promise((resolve) => setTimeout(resolve, 5000));
+          instances = await fetchInstances();
+          instance = instances.find((i) => i.InstanceId === instanceId);
+        } while (instance && ['pending', 'stopping'].includes(instance.State.toLowerCase()));
+        toggleLoading(false);
+      }
+
+      document.addEventListener('DOMContentLoaded', async () => {
+        toggleLoading(true);
+        let instances;
+        instances = await fetchInstances();
+        while (instances.some((i) => ['pending', 'stopping'].includes(i.State.toLowerCase()))) {
+          await new Promise((resolve) => setTimeout(resolve, 5000));
+          instances = await fetchInstances();
+        }
+        toggleLoading(false);
+      });
     </script>
   </body>
 </html>
