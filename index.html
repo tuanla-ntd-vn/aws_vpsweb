@@ -22,6 +22,7 @@
             <th class="border px-4 py-2">Name</th>
             <th class="border px-4 py-2">Public IP</th>
             <th class="border px-4 py-2">State</th>
+            <th class="border px-4 py-2">Region</th>
             <th class="border px-4 py-2">Action</th>
           </tr>
         </thead>
@@ -69,14 +70,15 @@
             <td class="border px-4 py-2">${instance.Name || ''}</td>
             <td class="border px-4 py-2 text-center">${instance.PublicIp || 'N/A'}</td>
             <td class="border px-4 py-2 text-center">${instance.State}</td>
+            <td class="border px-4 py-2 text-center">${instance.Region}</td>
             <td class="border px-4 py-2 text-center">
               <button class="bg-green-500 text-white px-2 py-1 rounded disabled:opacity-50"
-                onclick="controlInstance('${instance.InstanceId}', 'start')"
+                onclick="controlInstance('${instance.InstanceId}', 'start', '${instance.Region}')"
                 ${isRunning || isPending ? 'disabled' : ''}>
                 Start
               </button>
               <button class="bg-red-500 text-white px-2 py-1 rounded disabled:opacity-50"
-                onclick="controlInstance('${instance.InstanceId}', 'stop')"
+                onclick="controlInstance('${instance.InstanceId}', 'stop', '${instance.Region}')"
                 ${isStopped || isPending ? 'disabled' : ''}>
                 Stop
               </button>
@@ -86,13 +88,13 @@
         });
       }
 
-      async function controlInstance(instanceId, action) {
+      async function controlInstance(instanceId, action, region) {
         toggleLoading(true);
         try {
           const response = await fetch(`${API_CONTROL_URL}`, {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ instanceId, action }),
+            body: JSON.stringify({ instanceId, action, region }),
           });
           const data = await response.json();
           await waitForStableState(instanceId);
